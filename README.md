@@ -16,6 +16,7 @@ The **pipeline** tracks the **customer** **journey** by tracing all sessions a u
 5. **CSV** **Export**: Exports the channel_reporting table into a CSV with additional columns for CPO and ROAS.
 6. The pipeline is **modular**, easy to maintain, and supports scalable data processing and integration with external APIs.
 
+## Steps to run pipeline
 ### Install Dependencies
 Ensure all the necessary dependencies are installed, including libraries like sqlite3, pandas, requests, dotenv, and others required in the scripts. You can install them via pip:
 ```
@@ -44,7 +45,7 @@ If the channel_reporting table exists, the script will populate the table and ge
 ```
 python3 channel_reporting_excel.py
 ```
-### General Flow of the Pipeline:
+## General Flow of the Pipeline:
 
 1. Run customer_journey.py → Checks if journeys are generated. If not, creates them.
 2. Check if channel_reporting exists:
