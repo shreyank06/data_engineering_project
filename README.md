@@ -47,10 +47,10 @@ python3 channel_reporting_excel.py
 ```
 ## General Flow of the Pipeline:
 
-1. Run customer_journey.py → Checks if journeys are generated. If not, creates them.
-2. Check if channel_reporting exists:
+1. Run **customer_journey**.**py** → Checks if journeys are generated. If not, creates them.
+2. Check if **channel_reporting** exists:
 3. If yes: Executes aggregation and reporting.
-4. If no: Sends data to the IHC API for processing.
-5. Generate CSV Report → The pipeline can create an exportable CSV file with additional calculated fields like CPO (Cost per Order) and ROAS (Return on Ad Spend).
+4. If no: Sends **data** to the **IHC** **API** for processing.
+5. **Generate** **CSV** **Report** → The pipeline can create an exportable **CSV** file with additional calculated fields like **CPO** (**Cost** **per** **Order**) and **ROAS** (Return on Ad Spend).
 6. This will give you a complete automated workflow for processing and reporting on your data. Let me know if you need further details!
 
