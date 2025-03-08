@@ -3,6 +3,7 @@ import pandas as pd
 from send_to_ihc_api import send_to_ihc_api_and_store_results  # Importing the function from send_to_ihc.py
 import os
 import json
+from channel_reporting_excel import main as channel_reporting_main
 
 def json_serial(obj):
     """Custom JSON serializer for objects not serializable by default."""
@@ -10,7 +11,26 @@ def json_serial(obj):
         return obj.isoformat()  # Convert Timestamp to ISO 8601 string format
     raise TypeError("Type not serializable")
 
-def get_customer_journeys(db_path):
+def check_channel_reporting_table_exists(db_path):
+    """Check if the channel_reporting table exists in the database."""
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Query to check if channel_reporting table exists
+        cursor.execute("""
+            SELECT name FROM sqlite_master WHERE type='table' AND name='channel_reporting';
+        """)
+        table_exists = cursor.fetchone()
+
+        conn.close()
+        return table_exists is not None  # Returns True if the table exists, else False
+
+    except sqlite3.Error as e:
+        print(f"SQLite error occurred: {e}")
+        return False
+
+def get_customer_journeys(db_path, save_path):
     print("Connecting to database...")
     conn = sqlite3.connect(db_path)
     print("Connected!")
@@ -27,8 +47,8 @@ def get_customer_journeys(db_path):
     conversions['conv_timestamp'] = pd.to_datetime(conversions['conv_date'] + ' ' + conversions['conv_time'])
     sessions['session_timestamp'] = pd.to_datetime(sessions['event_date'] + ' ' + sessions['event_time'])
     
-    customer_journeys = {}
-    
+    customer_journeys = []
+
     print(f"Total conversions to process: {len(conversions)}")
     
     # Process each conversion to find previous sessions
@@ -46,9 +66,20 @@ def get_customer_journeys(db_path):
         
         # Sort sessions by timestamp
         user_sessions = user_sessions.sort_values(by='session_timestamp')
-        
-        # Store the journey
-        customer_journeys[conv_id] = user_sessions.to_dict(orient='records')
+
+        # Add sessions to the customer journey
+        for _, session in user_sessions.iterrows():
+            journey_entry = {
+                'conversion_id': conv_id,
+                'session_id': session['session_id'],
+                'timestamp': session['session_timestamp'].strftime('%Y-%m-%d %H:%M:%S'),
+                'channel_label': session['channel_name'],  # Assuming 'channel_name' is the correct field
+                'holder_engagement': session['holder_engagement'],
+                'closer_engagement': session['closer_engagement'],
+                'conversion': 0,  # Since the conversion happens after these sessions
+                'impression_interaction': session['impression_interaction']
+            }
+            customer_journeys.append(journey_entry)
     
     print("Processing complete!")
     
@@ -72,7 +103,13 @@ if __name__ == "__main__":
             journeys = json.load(f)
     else:
         print("Customer journeys not found. Generating journeys first...")
-        journeys = get_customer_journeys(db_path)
+        journeys = get_customer_journeys(db_path, save_path)
 
-    # Execute the next module after ensuring journeys are available
-    send_to_ihc_api_and_store_results(journeys, db_path)
+    # Check if channel_reporting table exists before sending to the API
+    if check_channel_reporting_table_exists(db_path):
+        print("Channel Reporting table exists, executing main of channel_reporting_excel.py...")
+        channel_reporting_main()  # Execute the main function from channel_reporting_excel.py   
+    else:
+        print("Channel reporting table does not exist, sending customer data to IHC API...")
+        send_to_ihc_api_and_store_results(journeys, db_path, conv_type_id="ihc_challenge")
+
