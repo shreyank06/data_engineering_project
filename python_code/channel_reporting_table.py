@@ -2,48 +2,80 @@ import sqlite3
 
 def check_ihc_sum_condition(db_path):
     """
-    Checks if the sum of 'ihc' column is equal to 1 for each 'conv_id',
-    prints the number of unique 'conv_id', and displays the first 20 rows.
+    Checks if the sum of 'ihc' column is equal to 1 for each 'conv_id'.
+    Also verifies if each row has a unique (conv_id, session_id) combination.
+    Prints:
+      - Total number of rows
+      - Total unique conv_id count
+      - Number of conv_id where ihc sum is not 1
+      - Number of affected rows
+      - If each row has a unique (conv_id, session_id) combination
+      - The affected rows themselves (if any)
     """
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        # Count the number of unique conv_id
-        cursor.execute("SELECT COUNT(DISTINCT conv_id) FROM attribution_customer_journey;")
-        conv_id_count = cursor.fetchone()[0]
-        print(f"🔢 Total unique conversion IDs: {conv_id_count}")
+        # Get total number of rows in the table
+        cursor.execute("SELECT COUNT(*) FROM attribution_customer_journey;")
+        total_rows = cursor.fetchone()[0]
 
-        # Query to check if sum(ihc) == 1 for each conv_id
+        # Get total number of unique conv_id
+        cursor.execute("SELECT COUNT(DISTINCT conv_id) FROM attribution_customer_journey;")
+        total_unique_conv_ids = cursor.fetchone()[0]
+
+        # Get conv_id where sum(ihc) != 1
         cursor.execute("""
-            SELECT conv_id, SUM(ihc) 
+            SELECT conv_id 
             FROM attribution_customer_journey 
             GROUP BY conv_id 
             HAVING SUM(ihc) != 1;
         """)
+        invalid_conv_ids = [row[0] for row in cursor.fetchall()]
+        num_invalid_conv_ids = len(invalid_conv_ids)
 
-        invalid_rows = cursor.fetchall()
+        # Check if (conv_id, session_id) combinations are unique
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM (
+                SELECT DISTINCT conv_id, session_id 
+                FROM attribution_customer_journey
+            );
+        """)
+        unique_combinations = cursor.fetchone()[0]
+        rows_are_unique = unique_combinations == total_rows
 
-        if invalid_rows:
-            print("⚠️ The following conversion IDs have ihc sum ≠ 1:")
-            for conv_id, ihc_sum in invalid_rows:
-                print(f"Conversion ID: {conv_id}, IHC Sum: {ihc_sum}")
-        else:
-            print("✅ All conversion IDs satisfy the ihc sum condition (sum = 1).")
-
-        # Fetch the first 20 rows
-        cursor.execute("SELECT * FROM attribution_customer_journey LIMIT 20;")
-        rows = cursor.fetchall()
+        print(f"📊 Total rows in table: {total_rows}")
+        print(f"🔢 Total unique conv_id: {total_unique_conv_ids}")
+        print(f"⚠️ conv_id where ihc sum ≠ 1 => {num_invalid_conv_ids}")
         
-        print("\n📋 First 20 rows of attribution_customer_journey:")
-        for row in rows:
-            print(row)
+        # Print uniqueness check result
+        if rows_are_unique:
+            print("✅ Each row has a unique (conv_id, session_id) combination.")
+        else:
+            print("❌ Duplicate (conv_id, session_id) combinations exist in the table!")
+
+        if invalid_conv_ids:
+            # Fetch all rows with invalid conv_id
+            cursor.execute("""
+                SELECT * FROM attribution_customer_journey
+                WHERE conv_id IN ({})
+            """.format(",".join("?" * len(invalid_conv_ids))), invalid_conv_ids)
+            
+            invalid_rows = cursor.fetchall()
+            print(f"⚠️ Affected rows: {len(invalid_rows)} out of {total_rows} total rows.\n")
+
+            # for row in invalid_rows:
+            #     print(row)
+        else:
+            print(f"✅ All {total_rows} rows satisfy the ihc sum condition (sum = 1).")
 
     except sqlite3.Error as e:
         print(f"SQLite error occurred: {e}")
     
     finally:
         conn.close()
+
 
 def populate_channel_reporting(db_path):
     """
@@ -138,6 +170,6 @@ def print_channel_reporting(db_path):
 # Example usage
 if __name__ == "__main__":
     db_path = "../challenge.db"  # Adjust path if needed
-    #check_ihc_sum_condition(db_path)
-    #populate_channel_reporting(db_path)
-    print_channel_reporting(db_path)
+    check_ihc_sum_condition(db_path)
+    populate_channel_reporting(db_path)
+    #print_channel_reporting(db_path)

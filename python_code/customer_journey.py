@@ -4,12 +4,34 @@ from send_to_ihc_api import send_to_ihc_api_and_store_results  # Importing the f
 import os
 import json
 from channel_reporting_excel import main as channel_reporting_main
+from channel_reporting_table import populate_channel_reporting, check_ihc_sum_condition
+
 
 def json_serial(obj):
     """Custom JSON serializer for objects not serializable by default."""
     if isinstance(obj, pd.Timestamp):
         return obj.isoformat()  # Convert Timestamp to ISO 8601 string format
     raise TypeError("Type not serializable")
+
+def check_table_exists(db_path, table_name):
+    """
+    Check if a table exists in the database.
+    """
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Query to check if the table exists
+        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';")
+        result = cursor.fetchone()
+        
+        # If the result is None, the table does not exist
+        return result is not None
+    except sqlite3.Error as e:
+        print(f"SQLite error occurred: {e}")
+        return False
+    finally:
+        conn.close()
 
 def check_channel_reporting_table_exists(db_path):
     """Check if the channel_reporting table exists in the database."""
@@ -98,18 +120,38 @@ if __name__ == "__main__":
 
     # Check if journeys are already saved
     if os.path.exists(save_path):
-        print(f"Customer journeys already exist in {save_path}, proceeding with execution...")
+        print(f"Customer journeys already exist in {save_path}, proceeding with next steps...")
         with open(save_path, "r") as f:
             journeys = json.load(f)
+                # Check if channel_reporting table exists before sending to the API
+        if check_channel_reporting_table_exists(db_path):
+            print("Channel Reporting table exists, proceeding with CSV file generation...")
+            check_ihc_sum_condition(db_path)  # Check the IHC sum condition after populating the channel_reporting table
+            # Ask the user if they want to proceed with preparing the CSV file
+            user_input = input("Do you want to prepare the CSV file? (yes/no): ").strip().lower()
+            
+            if user_input == 'yes':
+                print("📝 Continuing with preparing the CSV file...")
+                # Execute the main function from channel_reporting_excel.py   
+                channel_reporting_main()  # Execute the main function
+            else:
+                print("❌ CSV preparation skipped.")
+        else:
+            if not check_table_exists(db_path, 'attribution_customer_journey'):
+                print("Attribution customer journey table does not exist, sending customer data to IHC API...")
+                send_to_ihc_api_and_store_results(journeys, db_path, conv_type_id="ihc_challenge")
+                populate_channel_reporting(db_path)
+            else:
+                # If the table exists, you can call populate_channel_reporting here
+                print("Attribution customer journey table exists, populating channel reporting table...")
+                populate_channel_reporting(db_path)
+                check_ihc_sum_condition(db_path)  # Check the IHC sum condition after populating the channel_reporting table
+                channel_reporting_main()  # Execute the main function from channel_reporting_excel.py   
+           
     else:
         print("Customer journeys not found. Generating journeys first...")
         journeys = get_customer_journeys(db_path, save_path)
 
-    # Check if channel_reporting table exists before sending to the API
-    if check_channel_reporting_table_exists(db_path):
-        print("Channel Reporting table exists, executing main of channel_reporting_excel.py...")
-        channel_reporting_main()  # Execute the main function from channel_reporting_excel.py   
-    else:
-        print("Channel reporting table does not exist, sending customer data to IHC API...")
-        send_to_ihc_api_and_store_results(journeys, db_path, conv_type_id="ihc_challenge")
+
+        
 

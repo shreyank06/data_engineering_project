@@ -1,9 +1,9 @@
-import sqlite3
 import json
 import requests
 import time
 import os
 import dotenv
+from attribution_customer_journey import create_attribution_customer_journey_table, clear_attribution_customer_journey_table, insert_ihc_results
 
 # Load environment variables from .env file
 dotenv.load_dotenv()
@@ -22,46 +22,6 @@ API_URL = "https://api.ihc-attribution.com/v1/compute_ihc"
 # Define the maximum size of chunks to send to the API (based on API limits)
 MAX_JOURNEYS_PER_REQUEST = 100  # Maximum 100 customer journeys per request
 MAX_SESSIONS_PER_REQUEST = 2000  # Maximum 200 sessions per request (to comply with free-tier limit)
-
-
-def create_attribution_customer_journey_table(db_path):
-    """
-    Creates the attribution_customer_journey table if it doesn't exist.
-    """
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-
-    print("Checking if 'attribution_customer_journey' table exists...")
-
-    # Create table if not exists without PRIMARY KEY
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS attribution_customer_journey (
-        conv_id TEXT NOT NULL,
-        session_id TEXT NOT NULL,
-        ihc REAL NOT NULL CHECK (ihc >= 0 AND ihc <= 1)
-    )
-    """)
-
-    conn.commit()
-    conn.close()
-    print("Table 'attribution_customer_journey' is ready.")
-
-
-def clear_attribution_customer_journey_table(db_path):
-    """
-    Clears the contents of the attribution_customer_journey table.
-    """
-    print('Clearing the table...')
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-
-    # Delete all rows from the table
-    cursor.execute("DELETE FROM attribution_customer_journey")
-
-    conn.commit()
-    conn.close()
-    print("Table cleared.")
-
 
 def send_to_ihc_api_and_store_results(journeys, db_path, conv_type_id):
     # Create table if it doesn't exist
@@ -125,54 +85,6 @@ def send_to_ihc_api_and_store_results(journeys, db_path, conv_type_id):
         #time.sleep(5)  
 
     print("All customer journeys sent to IHC API!")
-
-
-def insert_ihc_results(response_data, db_path):
-    """
-    Inserts the IHC API results into the database.
-    """
-    print("Inserting IHC results into the database...")
-
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-
-    # print(response_data.get('value', []))
-    # sys.exit()
-
-    for result in response_data.get("value", []):
-        #print(result)
-        conv_id = result.get("conversion_id")
-        #print(f"Processing conversion ID: {conv_id}")
-        ihc_value = result.get("ihc", 0)
-        
-        #print(f"Processing conversion ID: {conv_id} with IHC value: {ihc_value}")
-        session_id = result.get("session_id")
-        # print(session_id)
-        # #sys.exit()
-
-        # Insert the data into the table
-        try:
-            cursor.execute("""
-                INSERT INTO attribution_customer_journey (conv_id, session_id, ihc) 
-                VALUES (?, ?, ?)
-            """, (conv_id, session_id, ihc_value))
-            print(f"Inserted session {session_id} for conversion {conv_id}")
-        except sqlite3.Error as e:
-            print(f"Error inserting data for session {session_id}: {e}")
-        
-                # Fetch and print the row just inserted
-        cursor.execute("""
-            SELECT * FROM attribution_customer_journey 
-            WHERE conv_id = ? AND session_id = ?
-        """, (conv_id, session_id))
-        
-        inserted_row = cursor.fetchone()
-        print("Inserted row:", inserted_row)
-        
-    conn.commit()
-    conn.close()
-    print("IHC results successfully inserted.")
-
 
 # Example usage
 if __name__ == "__main__":
