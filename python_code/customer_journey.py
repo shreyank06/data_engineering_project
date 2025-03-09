@@ -6,7 +6,6 @@ import json
 from channel_reporting_excel import main as channel_reporting_main
 from channel_reporting_table import populate_channel_reporting, check_ihc_sum_condition
 
-
 def json_serial(obj):
     """Custom JSON serializer for objects not serializable by default."""
     if isinstance(obj, pd.Timestamp):
@@ -18,36 +17,10 @@ def check_table_exists(db_path, table_name):
     Check if a table exists in the database.
     """
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        
-        # Query to check if the table exists
-        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}';")
-        result = cursor.fetchone()
-        
-        # If the result is None, the table does not exist
-        return result is not None
-    except sqlite3.Error as e:
-        print(f"SQLite error occurred: {e}")
-        return False
-    finally:
-        conn.close()
-
-def check_channel_reporting_table_exists(db_path):
-    """Check if the channel_reporting table exists in the database."""
-    try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        
-        # Query to check if channel_reporting table exists
-        cursor.execute("""
-            SELECT name FROM sqlite_master WHERE type='table' AND name='channel_reporting';
-        """)
-        table_exists = cursor.fetchone()
-
-        conn.close()
-        return table_exists is not None  # Returns True if the table exists, else False
-
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?;", (table_name,))
+            return cursor.fetchone() is not None
     except sqlite3.Error as e:
         print(f"SQLite error occurred: {e}")
         return False
@@ -65,7 +38,6 @@ def get_customer_journeys(db_path, save_path):
     sessions = pd.read_sql_query("SELECT * FROM session_sources", conn)
     print("Sessions data loaded!")
     
-    # Convert date and time columns into a single datetime column
     conversions['conv_timestamp'] = pd.to_datetime(conversions['conv_date'] + ' ' + conversions['conv_time'])
     sessions['session_timestamp'] = pd.to_datetime(sessions['event_date'] + ' ' + sessions['event_time'])
     
@@ -73,7 +45,6 @@ def get_customer_journeys(db_path, save_path):
 
     print(f"Total conversions to process: {len(conversions)}")
     
-    # Process each conversion to find previous sessions
     for idx, conv in conversions.iterrows():
         user_id = conv['user_id']
         conv_id = conv['conv_id']
@@ -81,36 +52,32 @@ def get_customer_journeys(db_path, save_path):
         
         print(f"Processing conversion {idx + 1}/{len(conversions)} - conv_id: {conv_id}, user_id: {user_id}")
         
-        # Get all sessions for the user before the conversion time
         user_sessions = sessions[(sessions['user_id'] == user_id) & (sessions['session_timestamp'] < conv_time)]
         
         print(f"Found {len(user_sessions)} sessions for user {user_id} before conversion {conv_id}")
         
-        # Sort sessions by timestamp
         user_sessions = user_sessions.sort_values(by='session_timestamp')
 
-        # Add sessions to the customer journey
         for _, session in user_sessions.iterrows():
             journey_entry = {
                 'conversion_id': conv_id,
                 'session_id': session['session_id'],
                 'timestamp': session['session_timestamp'].strftime('%Y-%m-%d %H:%M:%S'),
-                'channel_label': session['channel_name'],  # Assuming 'channel_name' is the correct field
+                'channel_label': session['channel_name'],
                 'holder_engagement': session['holder_engagement'],
                 'closer_engagement': session['closer_engagement'],
-                'conversion': 0,  # Since the conversion happens after these sessions
+                'conversion': 0,
                 'impression_interaction': session['impression_interaction']
             }
             customer_journeys.append(journey_entry)
     
     print("Processing complete!")
     
-    # Save to file
     with open(save_path, "w") as f:
         json.dump(customer_journeys, f, indent=4, default=json_serial)
 
     print(f"✅ Customer journeys saved to {save_path}")
-
+    
     conn.close()    
     return customer_journeys
 
@@ -118,22 +85,19 @@ if __name__ == "__main__":
     db_path = "../challenge.db"
     save_path = "customer_journeys.json"
 
-    # Check if journeys are already saved
     if os.path.exists(save_path):
         print(f"Customer journeys already exist in {save_path}, proceeding with next steps...")
         with open(save_path, "r") as f:
             journeys = json.load(f)
-                # Check if channel_reporting table exists before sending to the API
-        if check_channel_reporting_table_exists(db_path):
+        
+        if check_table_exists(db_path, 'channel_reporting'):
             print("Channel Reporting table exists, proceeding with CSV file generation...")
-            check_ihc_sum_condition(db_path)  # Check the IHC sum condition after populating the channel_reporting table
-            # Ask the user if they want to proceed with preparing the CSV file
+            check_ihc_sum_condition(db_path)
             user_input = input("Do you want to prepare the CSV file? (yes/no): ").strip().lower()
             
             if user_input == 'yes':
                 print("📝 Continuing with preparing the CSV file...")
-                # Execute the main function from channel_reporting_excel.py   
-                channel_reporting_main()  # Execute the main function
+                channel_reporting_main()
             else:
                 print("❌ CSV preparation skipped.")
         else:
@@ -142,16 +106,10 @@ if __name__ == "__main__":
                 send_to_ihc_api_and_store_results(journeys, db_path, conv_type_id="ihc_challenge")
                 populate_channel_reporting(db_path)
             else:
-                # If the table exists, you can call populate_channel_reporting here
                 print("Attribution customer journey table exists, populating channel reporting table...")
                 populate_channel_reporting(db_path)
-                check_ihc_sum_condition(db_path)  # Check the IHC sum condition after populating the channel_reporting table
-                channel_reporting_main()  # Execute the main function from channel_reporting_excel.py   
-           
+                check_ihc_sum_condition(db_path)
+                channel_reporting_main()
     else:
         print("Customer journeys not found. Generating journeys first...")
         journeys = get_customer_journeys(db_path, save_path)
-
-
-        
-
