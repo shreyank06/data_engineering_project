@@ -12,8 +12,7 @@ The **pipeline** tracks the **customer** **journey** by tracing all sessions a u
 3. If yes: Executes aggregation and reporting.
 4. If no: Sends **data** to the **IHC** **API** for processing.
 5. **Generate** **CSV** **Report** → The pipeline can create an exportable **CSV** file with additional calculated fields like **CPO** (**Cost** **per** **Order**) and **ROAS** (Return on Ad Spend).
-6. This will give you a complete automated workflow for processing and reporting on your data. Let me know if you need further details!
-
+   
 ## Steps to run pipeline
 ### Install Dependencies
 Ensure all the necessary dependencies are installed, including libraries like sqlite3, pandas, requests, dotenv, and others required in the scripts. You can install them via pip:
