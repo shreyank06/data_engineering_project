@@ -49,10 +49,5 @@ If not, it calls the send_to_ihc_api.py script to send customer journeys to the 
 ### Check the Database
 The script will check whether the channel_reporting table exists. If the table is missing, it will trigger the send_to_ihc_api_and_store_results() function, which processes customer journeys and sends them to the IHC API. The results will be stored in the database.
 
-### Run the Channel Reporting Scripts (if needed)
-If the channel_reporting table exists, the script will populate the table and generate a CSV report using the following:
-```
-python3 channel_reporting_excel.py
-```
 
 
